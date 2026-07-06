@@ -283,7 +283,11 @@ def point_in_ring(point: Tuple[float, float], ring: List[Tuple[float, float]]) -
     for i, (xi, yi) in enumerate(ring):
         xj, yj = ring[j]
         if (yi > y) != (yj > y):
-            edge_x = (xj - xi) * (y - yi) / max(0.000001, yj - yi) + xi
+            denominator = yj - yi
+            if abs(denominator) < 0.000001:
+                j = i
+                continue
+            edge_x = (xj - xi) * (y - yi) / denominator + xi
             if x < edge_x:
                 inside = not inside
         j = i

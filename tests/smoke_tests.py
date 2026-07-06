@@ -213,6 +213,36 @@ def test_map_render_smoke() -> None:
     assert screen.get_at((MAP_RECT.centerx, MAP_RECT.centery)) != (0, 0, 0, 255)
 
 
+def test_country_hit_test_matches_visible_map_after_zoom_and_drag() -> None:
+    from map.render import country_at_screen_pos
+    from ui.layout import MAP_RECT
+
+    def hit_name(state: GameState, lon: float, lat: float) -> str | None:
+        pos = state.camera.lonlat_to_screen(lon, lat, MAP_RECT)
+        assert MAP_RECT.collidepoint(pos), (lon, lat, pos)
+        country = country_at_screen_pos(state, pos, MAP_RECT)
+        return country.name if country else None
+
+    state = GameState()
+    state.choose_player_country("Ukraine")
+    state.camera.update(1.0)
+    assert hit_name(state, 30.5234, 50.4501) == "Ukraine"
+
+    state.camera.focus_lonlat(13.4050, 52.5200, zoom=2.2)
+    state.camera.update(1.0)
+    assert hit_name(state, 13.4050, 52.5200) == "Germany"
+
+    state.camera.focus_lonlat(30.5234, 50.4501, zoom=2.4)
+    state.camera.update(1.0)
+    assert hit_name(state, 34.0, 43.0) is None
+
+    ukraine_pos = state.camera.lonlat_to_screen(30.5234, 50.4501, MAP_RECT)
+    state.camera.zoom_at(1, ukraine_pos, MAP_RECT)
+    state.camera.update(1.0)
+    state.camera.pan_pixels(70, -35)
+    assert hit_name(state, 30.5234, 50.4501) == "Ukraine"
+
+
 def test_save_load_paths_after_project_move() -> None:
     assert ROOT_DIR.name == "GrandStrategy"
     assert SAVE_PATH.parent == ROOT_DIR / "saves"
@@ -449,6 +479,7 @@ def run_all() -> None:
         test_country_search_text_input_does_not_duplicate_letters,
         test_localization_parity,
         test_map_render_smoke,
+        test_country_hit_test_matches_visible_map_after_zoom_and_drag,
         test_save_load_paths_after_project_move,
         test_ui_search_and_escape_menu,
         test_alpha_event_catalog_and_effects,
