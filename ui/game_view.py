@@ -120,13 +120,15 @@ class UIGameViewMixin:
             f"Leader: {country.leader}",
             government_line,
             f"Population: {country.population:.1f}M",
+            f"GDP: {country.gdp} | GDP/cap: {country.gdp_per_capita()} | Unemployment: {country.unemployment:.1f}%",
             f"Money: {country.money} | Army: {country.army}",
             f"Debt: {country.debt} | Inflation: {country.inflation:.1f}%",
-            f"Stability: {country.stability} | Tech: {country.technology}",
+            f"Stability: {country.stability} | Tech: {country.technology} | Edu/Health: {country.education}/{country.healthcare}",
             laws_line,
             f"Resources: O{country.resources['oil']} F{country.resources['food']} M{country.resources['metal']}",
             f"Output: O{country.resource_output()['oil']} F{country.resource_output()['food']} M{country.resource_output()['metal']}",
-            f"Units: I{country.units['infantry']} T{country.units['tanks']} A{country.units['artillery']} Air{country.units['aircraft']}",
+            f"Army: morale {country.army_morale} exp {country.army_experience} wear {country.equipment_wear}",
+            f"Treaties: trade {len(country.trade_agreements)} military {len(country.military_agreements)} sanctions {len(country.sanctioned_by)}",
             f"Buildings: F{country.buildings['factory']} Farm{country.buildings['farm']} Oil{country.buildings['oil_field']} Mine{country.buildings['mine']}",
             f"Regions: {len(country.provinces)} | Influence: {country.influence}",
         ]
@@ -135,7 +137,7 @@ class UIGameViewMixin:
         if country.name != state.player_country_name:
             lines.append(f"Relation to you: {country.relation_to_player}")
         y = DETAIL_RECT.y + 50
-        for line in lines[:11]:
+        for line in lines[:12]:
             draw_text(screen, line, (DETAIL_RECT.x + 16, y), self.tiny_font, (197, 207, 216))
             y += 18
 

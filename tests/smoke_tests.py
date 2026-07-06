@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sys
 import tempfile
 from pathlib import Path
@@ -13,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from core.game_state import GameState
+from systems.event_catalog import EVENT_CATALOG, apply_effects, available_events
 from systems.save_load import SAVE_PATH, load_game, save_game
 from systems.save_state import SAVE_SCHEMA_VERSION
 
@@ -119,17 +121,17 @@ def test_legacy_v05_upgrade() -> None:
     assert len(loaded.armies) > 0
 
 
-def test_save_schema_version_09() -> None:
+def test_save_schema_version_current() -> None:
     state = GameState()
     data = state.to_dict()
-    assert data["version"] == "0.9"
+    assert data["version"] == "1.0.1"
     assert data["version"] == SAVE_SCHEMA_VERSION
 
 
-def test_migration_v06_v07_v08() -> None:
+def test_migration_v06_v07_v08_v09() -> None:
     state = GameState()
     state.choose_player_country("USA")
-    for version in ["0.6", "0.7", "0.8"]:
+    for version in ["0.6", "0.7", "0.8", "0.9", "1.0-alpha"]:
         loaded = GameState.from_dict(legacy_save_with_geometry(state, version))
         assert loaded.to_dict()["version"] == SAVE_SCHEMA_VERSION
         assert loaded.countries["USA"].geo_polygons
@@ -246,16 +248,201 @@ def test_ui_search_and_escape_menu() -> None:
     assets.play("button", enabled=False)
 
 
+def test_alpha_event_catalog_and_effects() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    player = state.player_country
+    assert player is not None
+    assert len(EVENT_CATALOG) >= 100
+    assert all(event.choices and event.description for event in EVENT_CATALOG)
+    assert available_events(player, state)
+    before_gdp = player.gdp
+    apply_effects(player, {"gdp": 25, "stability": 1, "education": 1, "oil": 3})
+    assert player.gdp == before_gdp + 25
+    assert player.education >= 1
+
+
+def test_alpha_diplomacy_actions() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    player = state.player_country
+    assert player is not None
+    player.money = 2000
+    state.set_relation("USA", "Germany", 70)
+    state.player_trade_agreement("Germany")
+    state.player_military_pact("Germany")
+    state.player_guarantee_independence("Germany")
+    assert "Germany" in player.trade_agreements
+    assert "Germany" in player.military_agreements
+    assert "Germany" in player.guarantees
+    state.set_relation("USA", "Russia", -70)
+    state.player_impose_sanctions("Russia")
+    state.player_send_ultimatum("Russia")
+    assert "Russia" in player.sanctions_against
+    assert "USA" in state.countries["Russia"].sanctioned_by
+    assert "Russia" in player.ultimatums_sent
+
+
+def test_alpha_economy_indicators_interact() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    player = state.player_country
+    assert player is not None
+    before_gdp = player.gdp
+    before_unemployment = player.unemployment
+    state.process_month()
+    assert player.tax_income > 0
+    assert player.military_spending > 0
+    assert player.gdp > 0
+    assert player.gdp != before_gdp or player.unemployment != before_unemployment
+    assert player.gdp_per_capita() > 0
+
+
+def test_alpha_army_morale_experience_and_wear() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    player = state.player_country
+    assert player is not None
+    before_experience = player.army_experience
+    before_wear = player.equipment_wear
+    state.declare_war("USA", "Mexico")
+    state.process_active_wars()
+    assert player.army_experience >= before_experience
+    assert player.equipment_wear >= before_wear
+    assert 0 <= player.army_morale <= 100
+
+
+def test_alpha_v09_save_migration_defaults() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    data = json.loads(json.dumps(state.to_dict()))
+    data["version"] = "0.9"
+    alpha_fields = [
+        "gdp",
+        "unemployment",
+        "education",
+        "healthcare",
+        "military_spending",
+        "tax_income",
+        "army_experience",
+        "army_morale",
+        "equipment_wear",
+        "trade_agreements",
+        "military_agreements",
+        "sanctions_against",
+        "sanctioned_by",
+        "guarantees",
+        "guaranteed_by",
+        "ultimatums_sent",
+    ]
+    for country_data in data["countries"].values():
+        for field in alpha_fields:
+            country_data.pop(field, None)
+    loaded = GameState.from_dict(data)
+    assert loaded.to_dict()["version"] == SAVE_SCHEMA_VERSION
+    assert loaded.countries["USA"].gdp > 0
+    assert loaded.countries["USA"].education > 0
+    assert isinstance(loaded.countries["USA"].trade_agreements, set)
+
+
+def test_alpha_ai_strategy_smoke() -> None:
+    from ai import run_monthly_ai
+
+    state = GameState()
+    state.choose_player_country("USA")
+    for month in range(12):
+        state.months_elapsed = month
+        run_monthly_ai(state)
+    treaty_count = sum(len(country.trade_agreements) + len(country.military_agreements) for country in state.countries.values())
+    assert treaty_count >= 0
+    assert all(country.gdp > 0 for country in state.countries.values())
+
+
+def test_v101_balance_24_120_months_no_runaway() -> None:
+    random.seed(11)
+    state = GameState()
+    state.choose_player_country("USA")
+    start_gdp = sum(country.gdp for country in state.countries.values())
+    start_tech = sum(country.technology for country in state.countries.values())
+    for _ in range(24):
+        state.process_month()
+    gdp_24 = sum(country.gdp for country in state.countries.values())
+    tech_24 = sum(country.technology for country in state.countries.values())
+    assert gdp_24 < start_gdp * 1.7
+    assert tech_24 <= start_tech + 20
+    for _ in range(96):
+        state.process_month()
+    gdp_120 = sum(country.gdp for country in state.countries.values())
+    max_money = max(country.money for country in state.countries.values())
+    max_tech = max(country.technology for country in state.countries.values())
+    assert gdp_120 < start_gdp * 4.2
+    assert max_money < 80000
+    assert max_tech <= 22
+
+
+def test_v101_ai_stability_collapse_triggers_recovery() -> None:
+    random.seed(4)
+    state = GameState()
+    country = state.countries["Canada"]
+    country.stability = 0
+    country.internal_problems["government_crisis"] = 95
+    state.process_ai_stability_crisis("Canada")
+    assert country.stability > 0
+    assert country.internal_problems["government_crisis"] <= 100
+
+
+def test_v101_sparse_relations_save_is_smaller() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    sparse = state.to_dict()
+    dense = json.loads(json.dumps(sparse))
+    for name, country_data in dense["countries"].items():
+        country_data["relations"] = state.countries[name].relations
+    sparse_size = len(json.dumps(sparse, separators=(",", ":")))
+    dense_size = len(json.dumps(dense, separators=(",", ":")))
+    assert sparse_size < dense_size * 0.65
+    assert all(len(country_data.get("relations", {})) < len(state.countries) for country_data in sparse["countries"].values())
+
+
+def test_v101_event_choices_are_category_specific() -> None:
+    choice_sets = {tuple(option.label for option in event.choices) for event in EVENT_CATALOG}
+    description_sets = {tuple(option.description for option in event.choices) for event in EVENT_CATALOG}
+    assert len(choice_sets) >= 10
+    assert len(description_sets) >= 10
+    assert ("Stabilize", "Exploit") not in choice_sets
+
+
+def test_v101_diplomacy_guarantee_consequence() -> None:
+    state = GameState()
+    state.choose_player_country("USA")
+    state.set_relation("USA", "Germany", 70)
+    assert state.guarantee_independence("USA", "Germany", announce=False)
+    before = state.get_relation("USA", "Russia")
+    state.declare_war("Russia", "Germany", ai_initiated=True)
+    assert state.get_relation("USA", "Russia") < before
+    assert "Russia" in state.countries["USA"].sanctions_against
+
+
+def test_v101_ultimatum_records_outcome() -> None:
+    random.seed(6)
+    state = GameState()
+    state.choose_player_country("USA")
+    state.countries["Mexico"].army = 10
+    state.countries["Mexico"].sync_army_from_units()
+    state.send_ultimatum("USA", "Mexico", announce=False)
+    assert state.countries["USA"].ultimatum_outcomes.get("Mexico") in {"accepted_payment", "rejected"}
+
+
 def run_all() -> None:
     tests = [
         test_new_game,
         test_choose_country_and_month,
         test_declare_war_and_move_army,
         test_save_load_roundtrip,
-        test_save_schema_version_09,
+        test_save_schema_version_current,
         test_legacy_v04_upgrade,
         test_legacy_v05_upgrade,
-        test_migration_v06_v07_v08,
+        test_migration_v06_v07_v08_v09,
         test_no_static_geometry_in_new_save,
         test_new_save_is_smaller_than_legacy_geometry_save,
         test_army_sync_after_recruit_and_war_loss,
@@ -264,6 +451,18 @@ def run_all() -> None:
         test_map_render_smoke,
         test_save_load_paths_after_project_move,
         test_ui_search_and_escape_menu,
+        test_alpha_event_catalog_and_effects,
+        test_alpha_diplomacy_actions,
+        test_alpha_economy_indicators_interact,
+        test_alpha_army_morale_experience_and_wear,
+        test_alpha_v09_save_migration_defaults,
+        test_alpha_ai_strategy_smoke,
+        test_v101_balance_24_120_months_no_runaway,
+        test_v101_ai_stability_collapse_triggers_recovery,
+        test_v101_sparse_relations_save_is_smaller,
+        test_v101_event_choices_are_category_specific,
+        test_v101_diplomacy_guarantee_consequence,
+        test_v101_ultimatum_records_outcome,
     ]
     for test in tests:
         test()

@@ -45,6 +45,15 @@ class Country:
     equipment: Dict[str, int] = field(default_factory=default_equipment)
     debt: int = 0
     inflation: float = 2.0
+    gdp: int = 0
+    unemployment: float = 7.0
+    education: int = 55
+    healthcare: int = 55
+    military_spending: int = 0
+    tax_income: int = 0
+    army_experience: int = 18
+    army_morale: int = 70
+    equipment_wear: int = 8
     last_month_income: int = 0
     last_month_expenses: int = 0
     last_month_balance: int = 0
@@ -52,6 +61,14 @@ class Country:
     vassal_of: Optional[str] = None
     vassals: Set[str] = field(default_factory=set)
     allies: Set[str] = field(default_factory=set)
+    sanctions_against: Set[str] = field(default_factory=set)
+    sanctioned_by: Set[str] = field(default_factory=set)
+    trade_agreements: Set[str] = field(default_factory=set)
+    military_agreements: Set[str] = field(default_factory=set)
+    guarantees: Set[str] = field(default_factory=set)
+    guaranteed_by: Set[str] = field(default_factory=set)
+    ultimatums_sent: Set[str] = field(default_factory=set)
+    ultimatum_outcomes: Dict[str, str] = field(default_factory=dict)
     wars: Set[str] = field(default_factory=set)
     relations: Dict[str, int] = field(default_factory=dict)
     spouse: Optional[str] = None
@@ -72,6 +89,7 @@ class Country:
             self.provinces = [
                 province(f"{self.name} Core", self.population, max(1, self.economy), 4, 8, 5),
             ]
+        self._ensure_alpha_indicators()
         self.sync_army_from_units()
     def _ensure_laws(self) -> None:
         merged = default_laws()
@@ -135,6 +153,7 @@ class Country:
         output["oil"] += self.buildings.get("oil_field", 0) * 10
         output["metal"] += self.buildings.get("mine", 0) * 10
         return output
+
     def produce_resources(self) -> Dict[str, int]:
         output = self.resource_output()
         if self.laws["trade_policy"] == "Free Trade":
@@ -182,35 +201,6 @@ class Country:
         conscription = LAW_EFFECTS["conscription"][self.laws["conscription"]]["war"]
         trade = LAW_EFFECTS["trade_policy"][self.laws["trade_policy"]]["war"]
         return float(conscription * trade)
-    def monthly_income(self) -> int:
-        party_income = PARTY_EFFECTS.get(self.party, PARTY_EFFECTS["Conservative"])["income"]
-        stability_factor = 0.45 + (self.stability / 180)
-        regional_value = self.regional_economy() * 8
-        resource_output = self.resource_output()
-        resource_factor = 1.0 + min(
-            0.38,
-            (resource_output["oil"] * 1.1 + resource_output["food"] * 0.45 + resource_output["metal"] * 0.8) / 260,
-        )
-        factory_value = self.buildings.get("factory", 0) * 24
-        debt_drag = 1.0 - min(0.25, self.debt / 15000)
-        inflation_drag = 1.0 - min(0.35, self.inflation / 90)
-        corruption_drag = 1.0 - min(0.30, self.internal_problems.get("corruption", 0) / 220)
-        base = 18 + self.population * 0.095 + self.economy * 14 + regional_value + factory_value + self.technology * 10
-        influence_bonus = self.influence * 0.65
-        vassal_bonus = len(self.vassals) * 22
-        if self.vassal_of:
-            vassal_bonus -= 18
-        return max(5, int((base + influence_bonus + vassal_bonus) * stability_factor * party_income * self.law_income_multiplier() * resource_factor * debt_drag * inflation_drag * corruption_drag))
-    def monthly_expenses(self) -> int:
-        unit_cost = (
-            self.units["infantry"] * 0.035
-            + self.units["tanks"] * 1.6
-            + self.units["artillery"] * 1.1
-            + self.units["aircraft"] * 2.4
-        )
-        building_cost = self.buildings.get("factory", 0) * 9 + self.buildings.get("oil_field", 0) * 4 + self.buildings.get("mine", 0) * 4
-        interest = int(self.debt * (0.006 + min(0.014, self.inflation / 6000)))
-        return max(0, int(unit_cost + building_cost + interest))
     def supply_need(self) -> Dict[str, int]:
         needs = {resource_name: 0.0 for resource_name in RESOURCES}
         for unit_type, count in self.units.items():
@@ -234,14 +224,6 @@ class Country:
             else:
                 ratios.append(min(1.0, self.resources.get(resource_name, 0) / amount))
         return max(0.25, min(ratios) if ratios else 1.0)
-    def national_power_score(self) -> int:
-        economy_score = self.monthly_income() + self.regional_economy() * 9 + self.money // 12
-        military_score = int(self.army * self.supply_ratio() * 0.55)
-        diplomatic_score = self.influence * 4 + len(self.allies) * 60 + len(self.vassals) * 85
-        stability_score = self.stability * 4
-        debt_penalty = self.debt // 18 + int(self.inflation * 4)
-        problem_penalty = sum(self.internal_problems.values()) * 2
-        return max(0, economy_score + military_score + diplomatic_score + stability_score - debt_penalty - problem_penalty)
     def sync_army_from_units(self) -> None:
         self.army = int(sum(self.units[unit_type] * UNIT_POWER[unit_type] for unit_type in UNIT_TYPES))
     def build_cost(self, building_type: str) -> Dict[str, int]:
@@ -261,6 +243,8 @@ class Country:
         self.buildings[building_type] += 1
         if building_type == "factory":
             self.economy += 1
+            self.gdp += 90
+            self.unemployment = max(1.0, self.unemployment - 0.5)
         elif self.provinces:
             target = max(self.provinces, key=lambda region: int(region.get("economy", 0)))
             resources = dict(target.get("resources", {}))
@@ -271,6 +255,8 @@ class Country:
             elif building_type == "mine":
                 resources["metal"] = int(resources.get("metal", 0)) + 2
             target["resources"] = resources
+            self.gdp += 35
+            self.unemployment = max(1.0, self.unemployment - 0.2)
         return True
     def produce_weapon_batch(self, unit_type: str) -> bool:
         if unit_type not in UNIT_TYPES:
@@ -296,10 +282,6 @@ class Country:
         return 70 + self.army // 19
     def recruit_resource_cost(self) -> Dict[str, int]:
         return {"oil": 2 + self.technology // 2, "food": 8 + self.army // 280, "metal": 10 + self.army // 230}
-    def tech_cost(self) -> int:
-        return 170 + self.technology * 90
-    def tech_resource_cost(self) -> Dict[str, int]:
-        return {"oil": 8 + self.technology, "food": 0, "metal": 8 + self.technology}
     def has_resources(self, costs: Dict[str, int]) -> bool:
         return all(self.resources.get(resource_name, 0) >= amount for resource_name, amount in costs.items())
     def spend_resources(self, costs: Dict[str, int]) -> None:
@@ -320,6 +302,8 @@ class Country:
         self.money -= cost
         self.spend_resources(resource_cost)
         self.economy += 1
+        self.gdp += 65
+        self.unemployment = max(1.0, self.unemployment - 0.35)
         if self.provinces:
             best_region = max(self.provinces, key=lambda region: int(region.get("economy", 0)))
             best_region["economy"] = int(best_region.get("economy", 0)) + 1
@@ -338,16 +322,23 @@ class Country:
         self.spend_resources(resource_cost)
         self.units["infantry"] += max(8, amount)
         self.sync_army_from_units()
+        self.army_morale = clamp(self.army_morale + 1, 0, 100)
+        self.unemployment = max(1.0, self.unemployment - 0.12)
         self.stability = clamp(self.stability - 1, 0, 100)
         return True
     def research_technology(self) -> bool:
         cost = self.tech_cost()
         resource_cost = self.tech_resource_cost()
+        if self.technology > self.research_soft_cap() + 3:
+            return False
         if self.money < cost or not self.has_resources(resource_cost):
             return False
         self.money -= cost
         self.spend_resources(resource_cost)
         self.technology += 1
+        self.gdp += min(45, max(8, int(self.structural_gdp_capacity() * 0.002)))
+        if self.education < 100:
+            self.education = clamp(self.education + 1, 1, 100)
         self.stability = clamp(self.stability + 1, 0, 100)
         return True
     def change_party(self, party: str) -> bool:
@@ -382,5 +373,7 @@ class Country:
             return
         self.population = round(sum(float(region.get("population", 0)) for region in self.provinces), 1)
         self.territory_points = max(1, len(self.provinces) * 3 + self.regional_economy())
+from core.country_indicators import attach_country_indicators
 from core.country_serialization import attach_country_serialization
+attach_country_indicators(Country)
 attach_country_serialization(Country)

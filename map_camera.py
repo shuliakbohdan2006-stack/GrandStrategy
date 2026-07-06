@@ -1,1 +1,3 @@
-﻿from map.camera import *
+"""Deprecated compatibility wrapper. Use map.camera directly."""
+
+from map.camera import *

@@ -4,6 +4,7 @@ import random
 from typing import Dict
 
 from core.country_data import LAW_OPTIONS, PARTIES, clamp
+from localization import tr
 
 
 class GovernanceMixin:
@@ -43,6 +44,10 @@ class GovernanceMixin:
                 protests_delta += 2
             if country.inflation > 10:
                 protests_delta += 1
+            if country.unemployment > 12:
+                protests_delta += 1
+            if country.healthcare < 38:
+                protests_delta += 1
             if country.last_month_balance < -100:
                 protests_delta += 1
             if country.laws["censorship"] == "State Media":
@@ -53,6 +58,8 @@ class GovernanceMixin:
 
             corruption_delta = 1 if country.money > 2500 or country.laws["censorship"] == "State Media" else 0
             if country.laws["taxes"] == "Low":
+                corruption_delta -= 1
+            if country.education > 70:
                 corruption_delta -= 1
             if random.random() < 0.18:
                 corruption_delta += random.choice([-1, 0, 1])
@@ -73,6 +80,8 @@ class GovernanceMixin:
             if problems["protests"] > 65:
                 crisis_delta += 2
             if country.debt > 6000:
+                crisis_delta += 1
+            if country.unemployment > 18:
                 crisis_delta += 1
             if country.stability < 35:
                 crisis_delta += 2
@@ -96,6 +105,40 @@ class GovernanceMixin:
                     self.add_notification("Mass protests", "Protests are threatening state stability.")
                 if problems["government_crisis"] >= 75 and random.random() < 0.25:
                     self.add_notification("Government crisis", "Your cabinet is close to collapse.")
+            elif country.stability <= 0:
+                self.process_ai_stability_crisis(country.name)
+
+    def process_ai_stability_crisis(self, country_name: str) -> None:
+        country = self.countries[country_name]
+        outcome = random.choice(["recovery_program", "regime_change", "civil_unrest", "debt_restructuring"])
+        if outcome == "recovery_program":
+            cost = min(country.money, max(20, country.monthly_income() // 2))
+            country.money -= cost
+            country.stability = clamp(country.stability + 18, 0, 100)
+            country.internal_problems["protests"] = clamp(country.internal_problems["protests"] - 18, 0, 100)
+            summary = "starts a recovery program"
+        elif outcome == "regime_change":
+            country.leader = random.choice(country.leader_pool)
+            country.party = random.choice(PARTIES)
+            country.stability = 24
+            country.influence = max(0, country.influence - 4)
+            country.internal_problems["government_crisis"] = clamp(country.internal_problems["government_crisis"] - 35, 0, 100)
+            summary = "changes regime after a collapse"
+        elif outcome == "debt_restructuring":
+            forgiven = int(country.debt * 0.28)
+            country.debt = max(0, country.debt - forgiven)
+            country.inflation = min(100.0, country.inflation + 2.5)
+            country.stability = 16
+            country.influence = max(0, country.influence - 2)
+            summary = "restructures debt under emergency pressure"
+        else:
+            country.money = max(0, country.money - max(15, country.monthly_income() // 3))
+            country.stability = 10
+            country.internal_problems["protests"] = 100
+            country.internal_problems["government_crisis"] = clamp(country.internal_problems["government_crisis"] + 12, 0, 100)
+            summary = "suffers civil unrest and emergency penalties"
+        if country.is_core_country or random.random() < 0.10:
+            self.add_message(tr("log.ai_crisis").format(country=country.name, summary=summary))
 
     def change_player_party(self, party: str) -> None:
         player = self.player_country

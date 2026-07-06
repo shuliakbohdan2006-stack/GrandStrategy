@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.0.1
+
+- Added diminishing returns for GDP and replaced linear GDP income scaling with a softer GDP anchor.
+- Added economy, technology and excessive-reserve maintenance costs to slow money runaway.
+- Limited AI research cadence and added technology soft-cap pressure.
+- Added AI stability crisis outcomes: recovery program, regime change, civil unrest and debt restructuring.
+- Reworked event choice labels/descriptions so categories no longer all use identical `Stabilize` / `Exploit` options.
+- Changed saves to compact JSON and sparse relation serialization while preserving old full relation-matrix migration.
+- Added diplomacy consequences for guarantees, sanction retaliation and stored ultimatum outcomes.
+- Expanded notification categories and localized new v1.0.1 UI/log keys in English, Russian, German and Ukrainian.
+- Refactored country Alpha indicators and finance helpers into `core/country_indicators.py`; `core/country_model.py` is below 400 lines again.
+- Marked root compatibility wrapper files as deprecated.
+- Added regression tests for balance simulation, AI crisis handling, sparse saves, event choices and diplomacy guarantees.
+
+## v1.0 Alpha
+
+- Added interconnected country indicators: GDP, GDP per capita, unemployment, education, healthcare, military spending and tax income.
+- Connected economy, stability, services, debt, inflation, resources and internal problems through monthly indicator drift.
+- Added 100+ data-driven events with categories, trigger conditions, descriptions, response choices and gameplay effects.
+- Expanded diplomacy with sanctions, trade agreements, military pacts, guarantees of independence and ultimatums.
+- Deepened war calculations with national army morale, experience, equipment wear, supply readiness and combined arms effects.
+- Improved AI strategy for investments, buildings, research, treaties, sanctions, ultimatums and war target selection.
+- Updated country detail, overview, diplomacy and statistics UI to expose the new Alpha systems.
+- Updated Save/Load schema to `1.0-alpha` with migration from v0.6, v0.7, v0.8 and v0.9.
+- Added regression coverage for Alpha events, diplomacy, economy indicators, army stats, v0.9 migration and AI smoke behavior.
+
 ## v0.9.1
 
 - Prepared the project for GitHub publication and future collaborative development.

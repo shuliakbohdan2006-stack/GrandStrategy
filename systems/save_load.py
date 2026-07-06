@@ -13,7 +13,7 @@ LEGACY_SAVE_PATH = PROJECT_ROOT / "save_game.json"
 def save_game(game_state: GameState, path: Path = SAVE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as file:
-        json.dump(game_state.to_dict(), file, indent=2)
+        json.dump(game_state.to_dict(), file, separators=(",", ":"))
 
 
 def load_game(path: Path = SAVE_PATH) -> GameState:

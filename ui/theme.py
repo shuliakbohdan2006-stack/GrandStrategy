@@ -23,6 +23,16 @@ CATEGORY_COLORS = {
     "Family": (218, 148, 180),
     "Technology": (87, 158, 214),
     "Diplomacy": (222, 174, 72),
+    "Science": (92, 172, 210),
+    "Society": (126, 196, 150),
+    "Disaster": (218, 128, 68),
+    "Epidemic": (106, 190, 164),
+    "Terrorism": (214, 78, 82),
+    "Corruption": (190, 126, 80),
+    "Sport": (102, 180, 118),
+    "Culture": (210, 132, 196),
+    "Migration": (128, 166, 220),
+    "Energy": (230, 190, 76),
 }
 
 _SHADOW_CACHE: dict[Tuple[int, int, int], pygame.Surface] = {}
@@ -57,6 +67,26 @@ def category_for(text: str) -> str:
         return "Family"
     if any(word in lowered for word in ["technology", "research", "breakthrough"]):
         return "Technology"
-    if any(word in lowered for word in ["diplomacy", "relation", "alliance", "spy"]):
+    if any(word in lowered for word in ["science", "laboratory", "university", "patent"]):
+        return "Science"
+    if any(word in lowered for word in ["society", "housing", "labor", "public health"]):
+        return "Society"
+    if any(word in lowered for word in ["disaster", "flood", "earthquake", "wildfire", "drought", "storm"]):
+        return "Disaster"
+    if any(word in lowered for word in ["epidemic", "vaccine", "hospital", "clinic"]):
+        return "Epidemic"
+    if any(word in lowered for word in ["terror", "security alert", "border raid"]):
+        return "Terrorism"
+    if any(word in lowered for word in ["corruption", "bribery", "fraud", "procurement"]):
+        return "Corruption"
+    if any(word in lowered for word in ["sport", "stadium", "olympic"]):
+        return "Sport"
+    if any(word in lowered for word in ["culture", "museum", "festival", "heritage"]):
+        return "Culture"
+    if any(word in lowered for word in ["migration", "refugee", "visa", "diaspora"]):
+        return "Migration"
+    if any(word in lowered for word in ["energy", "oil", "grid", "pipeline", "refinery"]):
+        return "Energy"
+    if any(word in lowered for word in ["diplomacy", "relation", "alliance", "spy", "sanction", "ultimatum", "guarantee"]):
         return "Diplomacy"
     return "General"

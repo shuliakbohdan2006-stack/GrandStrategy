@@ -16,6 +16,7 @@ from core.country_data import (
 from core.country_factory import create_initial_countries
 from core.country_model import Country
 from core.version import GAME_VERSION
+from localization import tr
 from systems.armies import Army, create_initial_armies, sync_armies_to_countries, update_all_armies
 from systems.events import LOVER_NAMES, SPOUSE_NAMES, maybe_add_child
 from map.camera import MapCamera
@@ -153,7 +154,7 @@ class GameState(
             self.camera.focus_lonlat(country.label_lon, country.label_lat, zoom=2.0)
         self.messages = [
             f"You now rule {country.name}. Capital: {country.capital}. Leader: {country.leader}.",
-            f"v{GAME_VERSION}: GitHub preparation, stability fixes, lean saves, and army sync are active.",
+            tr("status.version_note").format(version=GAME_VERSION),
         ]
         self.current_tab = "Overview"
 
@@ -196,6 +197,7 @@ class GameState(
             country.last_month_income = income
             country.last_month_expenses = expenses
             country.last_month_balance = income - expenses
+            country.update_monthly_indicators(income, expenses, self.date.month)
             country.money += income - expenses
             if country.money < 0:
                 deficit = abs(country.money)

@@ -1,6 +1,8 @@
 import random
 
 from core.country_data import clamp
+from localization import tr
+from systems.event_catalog import apply_effects, available_events, choose_event_option, summarize_effects
 
 
 SPOUSE_NAMES = [
@@ -45,89 +47,45 @@ def maybe_add_child(country) -> str:
 
 
 def apply_random_event(game_state) -> None:
-    if random.random() > 0.42:
+    if random.random() > 0.48:
         return
 
-    event = random.choice([
-        "economic crisis",
-        "election scandal",
-        "military reform",
-        "royal wedding",
-        "betrayal",
-        "spy scandal",
-        "border conflict",
-        "technology breakthrough",
-    ])
-
     countries = list(game_state.countries.values())
-    country = random.choice(countries)
+    player = game_state.player_country
+    if player and random.random() < 0.35:
+        country = player
+    else:
+        country = random.choice(countries)
 
-    if event == "economic crisis":
-        loss = max(40, int(country.money * 0.17))
-        country.money = max(0, country.money - loss)
-        country.stability = clamp(country.stability - 8, 0, 100)
-        game_state.add_message(f"Event: economic crisis in {country.name}. Money -{loss}, stability down.")
-        if country.name == game_state.player_country_name:
-            game_state.add_notification("Economic crisis", f"{country.name} loses {loss} money and stability.")
+    available = available_events(country, game_state)
+    if not available:
+        return
 
-    elif event == "election scandal":
-        country.stability = clamp(country.stability - 12, 0, 100)
-        country.influence = max(0, country.influence - 2)
-        game_state.add_message(f"Event: election scandal damages {country.name}.")
-        if country.name == game_state.player_country_name:
-            game_state.add_notification("Election scandal", "Your legitimacy has been damaged.")
+    event = random.choice(available)
+    option = choose_event_option(event, country)
+    apply_effects(country, option.effects)
+    effect_text = summarize_effects(option.effects)
+    game_state.add_message(
+        tr("log.event").format(
+            category=event.category,
+            title=event.title,
+            country=country.name,
+            option=option.label,
+            effects=effect_text,
+        )
+    )
 
-    elif event == "military reform":
-        gain = max(15, int(country.army * 0.06))
-        country.units["infantry"] += gain
-        country.sync_army_from_units()
-        country.stability = clamp(country.stability + 2, 0, 100)
-        game_state.add_message(f"Event: military reform in {country.name}. Army +{gain}.")
+    important_categories = {"War", "Epidemic", "Terrorism", "Natural Disaster", "Politics", "Energy"}
+    if country.name == game_state.player_country_name and event.category in important_categories:
+        game_state.add_notification(event.title, f"{event.description} Response: {option.label}. Effects: {effect_text}.", pause=event.category in {"War", "Politics", "Natural Disaster"})
 
-    elif event == "royal wedding":
-        player = game_state.player_country
-        if player and player.spouse is None and random.random() < 0.45:
-            player.spouse = random.choice(SPOUSE_NAMES)
-            player.stability = clamp(player.stability + 6, 0, 100)
-            game_state.add_message(f"Event: royal wedding. {player.spouse} joins your court.")
-        else:
-            country.stability = clamp(country.stability + 5, 0, 100)
-            game_state.add_message(f"Event: royal wedding celebrations boost {country.name}.")
+    if event.category in {"Terrorism", "Politics"} and country.stability < 35 and random.random() < 0.18:
+        country.internal_problems["government_crisis"] = clamp(country.internal_problems["government_crisis"] + 5, 0, 100)
 
-    elif event == "betrayal":
-        player = game_state.player_country
-        if player and player.lover and random.random() < 0.5:
-            player.stability = clamp(player.stability - 9, 0, 100)
-            game_state.add_message(f"Event: betrayal. Rumors around {player.lover} hurt your rule.")
-        else:
-            target = random.choice([c for c in countries if c.name != country.name])
-            game_state.add_relation_delta(country.name, target.name, -20)
-            game_state.add_message(f"Event: betrayal between {country.name} and {target.name}.")
-
-    elif event == "spy scandal":
-        a, b = random.sample(countries, 2)
-        game_state.add_relation_delta(a.name, b.name, -24)
-        a.stability = clamp(a.stability - 3, 0, 100)
-        game_state.add_message(f"Event: spy scandal. Relations fall between {a.name} and {b.name}.")
-        if game_state.player_country_name in [a.name, b.name]:
-            game_state.add_notification("Spy scandal", f"Relations between {a.name} and {b.name} deteriorate.")
-
-    elif event == "border conflict":
-        a, b = random.sample(countries, 2)
-        game_state.add_relation_delta(a.name, b.name, -28)
-        if game_state.get_relation(a.name, b.name) < -65 and random.random() < 0.35:
-            game_state.declare_war(a.name, b.name, ai_initiated=True)
-        else:
-            game_state.add_message(f"Event: border conflict between {a.name} and {b.name}.")
-        if game_state.player_country_name in [a.name, b.name]:
-            game_state.add_notification("Border conflict", f"Tension rises between {a.name} and {b.name}.")
-
-    elif event == "technology breakthrough":
-        country.technology += 1
-        country.money += 50
-        game_state.add_message(f"Event: technology breakthrough in {country.name}.")
-        if country.name == game_state.player_country_name:
-            game_state.add_notification("Technology breakthrough", "Your researchers gained a technology level.", pause=False)
+    if event.category == "War" and country.wars and random.random() < 0.15:
+        enemy_name = random.choice(list(country.wars))
+        if enemy_name in game_state.countries:
+            game_state.add_relation_delta(country.name, enemy_name, -6)
 
 
 def process_family_month(game_state) -> None:

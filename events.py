@@ -1,1 +1,3 @@
-﻿from systems.events import *
+"""Deprecated compatibility wrapper. Use systems.events directly."""
+
+from systems.events import *

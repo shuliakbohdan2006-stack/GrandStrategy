@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 
 from core.country_data import RESOURCES, UNIT_POWER, clamp
 from core.country_model import Country
+from localization import tr
 from systems.armies import average_morale, average_supply, order_attack, order_defense, order_retreat
 
 
@@ -57,11 +58,31 @@ class WarMixin:
             "fronts": self._create_fronts(attacker_name, defender_name),
             "ai_initiated": ai_initiated,
         }
+        self._process_guarantees_on_war_start(attacker_name, defender_name)
         order_attack(self.armies, attacker, defender)
         order_defense(self.armies, defender)
         if not silent:
             prefix = "AI war" if ai_initiated else "War"
             self.add_message(f"{prefix}: {attacker_name} declares a long war on {defender_name}.")
+
+    def _process_guarantees_on_war_start(self, attacker_name: str, defender_name: str) -> None:
+        defender = self.countries[defender_name]
+        for guarantor_name in list(defender.guaranteed_by):
+            if guarantor_name not in self.countries or guarantor_name in {attacker_name, defender_name}:
+                continue
+            guarantor = self.countries[guarantor_name]
+            self.add_relation_delta(guarantor_name, attacker_name, -28)
+            guarantor.influence += 1
+            if attacker_name not in guarantor.sanctions_against:
+                self.apply_sanctions(guarantor_name, attacker_name, announce=False)
+            if guarantor.is_core_country or defender.name == self.player_country_name or guarantor.name == self.player_country_name:
+                self.add_message(
+                    tr("log.guarantee").format(
+                        guarantor=guarantor_name,
+                        attacker=attacker_name,
+                        defender=defender_name,
+                    )
+                )
 
     def process_active_wars(self) -> None:
         for wid, war in list(self.active_wars.items()):
@@ -125,7 +146,7 @@ class WarMixin:
 
     def _monthly_war_power(self, country: Country) -> float:
         country.sync_army_from_units()
-        readiness = country.supply_ratio()
+        readiness = country.military_readiness()
         map_supply = average_supply(self.armies, country.name) / 100
         map_morale = average_morale(self.armies, country.name) / 100
         resource_output = country.resource_output()
@@ -138,17 +159,27 @@ class WarMixin:
         stability_factor = 0.68 + country.stability / 165
         tech_factor = 1.0 + country.technology * 0.085
         influence_factor = 1.0 + country.influence / 420
-        return max(1.0, country.army * readiness * (0.70 + map_supply * 0.30) * (0.72 + map_morale * 0.38) * industry_bonus * combined_arms * stability_factor * tech_factor * influence_factor * country.law_war_multiplier() * random.uniform(0.88, 1.12))
+        doctrine_factor = 1.0 + min(0.18, country.army_experience / 420)
+        wear_factor = 1.0 - min(0.28, country.equipment_wear / 250)
+        return max(1.0, country.army * readiness * (0.70 + map_supply * 0.30) * (0.72 + map_morale * 0.38) * industry_bonus * combined_arms * stability_factor * tech_factor * influence_factor * doctrine_factor * wear_factor * country.law_war_multiplier() * random.uniform(0.88, 1.12))
 
     def _monthly_casualties(self, country: Country, enemy_power: float, total_power: float) -> int:
         pressure = enemy_power / max(1.0, total_power)
-        rate = random.uniform(0.012, 0.034) + pressure * 0.018
+        experience_shield = 1.0 - min(0.24, country.army_experience / 360)
+        morale_shield = 1.0 - min(0.16, country.army_morale / 520)
+        wear_penalty = 1.0 + min(0.20, country.equipment_wear / 360)
+        rate = (random.uniform(0.012, 0.034) + pressure * 0.018) * experience_shield * morale_shield * wear_penalty
         return max(2, int(country.army * rate))
 
     def _consume_war_resources(self, country: Country) -> None:
         country.consume_supply(multiplier=1.35)
         if any(country.resources[resource_name] == 0 for resource_name in RESOURCES):
             country.stability = clamp(country.stability - 1, 0, 100)
+            country.army_morale = clamp(country.army_morale - 3, 0, 100)
+        else:
+            country.army_morale = clamp(country.army_morale + 1, 0, 100)
+        country.army_experience = clamp(country.army_experience + 1, 0, 100)
+        country.equipment_wear = clamp(country.equipment_wear + 2, 0, 100)
 
     def _create_fronts(self, attacker_name: str, defender_name: str) -> List[Dict[str, object]]:
         defender = self.countries[defender_name]
@@ -203,6 +234,8 @@ class WarMixin:
             country.units[unit_type] -= units_lost
             remaining -= int(units_lost * UNIT_POWER[unit_type])
         country.sync_army_from_units()
+        if losses > max(30, country.army * 0.04):
+            country.army_morale = clamp(country.army_morale - 2, 0, 100)
 
     def _war_involves_player(self, war: Dict[str, object]) -> bool:
         return self.player_country_name in [war.get("attacker"), war.get("defender")]

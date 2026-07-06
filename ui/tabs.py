@@ -68,9 +68,11 @@ class UITabsMixin:
         draw_text(screen, tr("tab.overview.dashboard"), (panel.x + 18, panel.y + 45), self.small_font, (197, 207, 216))
         lines = [
             f"Power {player.national_power_score()} | Economy {player.economy} | Regional economy {player.regional_economy()}",
+            f"GDP {player.gdp} | GDP per capita {player.gdp_per_capita()} | Unemployment {player.unemployment:.1f}%",
             f"Army {player.army} | Units I{player.units['infantry']} T{player.units['tanks']} A{player.units['artillery']} Air{player.units['aircraft']}",
             f"Resources oil {player.resources['oil']} food {player.resources['food']} metal {player.resources['metal']}",
-            f"Stability {player.stability} | Debt {player.debt} | Inflation {player.inflation:.1f}% | Wars {active_wars}",
+            f"Stability {player.stability} | Education {player.education} | Healthcare {player.healthcare} | Wars {active_wars}",
+            f"Debt {player.debt} | Inflation {player.inflation:.1f}% | Tax income {player.tax_income} | Military spending {player.military_spending}",
             f"Problems P{problems['protests']} C{problems['corruption']} S{problems['separatism']} G{problems['government_crisis']}",
             f"Victory goal: {progress['goal']} | {progress['label']} {progress['value']}/{progress['target']}",
         ]
@@ -171,9 +173,16 @@ class UITabsMixin:
         if target:
             relation = state.get_relation(state.player_country_name, target.name)  # type: ignore[arg-type]
             draw_text(screen, f"Target: {target.name} | Relation: {relation} | Leader: {target.leader}", (panel.x + 390, panel.y + 52), self.small_font, (197, 207, 216))
+            treaty_line = f"Trade {'yes' if target.name in state.player_country.trade_agreements else 'no'} | Military {'yes' if target.name in state.player_country.military_agreements else 'no'} | Sanctions {'yes' if target.name in state.player_country.sanctions_against else 'no'}"  # type: ignore[union-attr]
+            draw_text(screen, treaty_line, (panel.x + 390, panel.y + 72), self.tiny_font, (169, 179, 188))
             self._add_button(pygame.Rect(panel.x + 390, panel.y + 86, 120, 34), tr("action.improve"), lambda s, n=target.name: action_none(s.improve_relations(n)), icon="diplomacy")
             self._add_button(pygame.Rect(panel.x + 520, panel.y + 86, 120, 34), tr("action.worsen"), lambda s, n=target.name: action_none(s.worsen_relations(n)), icon="war")
             self._add_button(pygame.Rect(panel.x + 650, panel.y + 86, 165, 34), tr("action.offer_alliance"), lambda s, n=target.name: action_none(s.offer_alliance(n)), icon="diplomacy")
+            self._add_button(pygame.Rect(panel.x + 390, panel.y + 126, 92, 30), tr("action.sanction"), lambda s, n=target.name: action_none(s.player_impose_sanctions(n)), icon="diplomacy")
+            self._add_button(pygame.Rect(panel.x + 488, panel.y + 126, 92, 30), tr("action.trade_agreement"), lambda s, n=target.name: action_none(s.player_trade_agreement(n)), icon="trade")
+            self._add_button(pygame.Rect(panel.x + 586, panel.y + 126, 92, 30), tr("action.military_pact"), lambda s, n=target.name: action_none(s.player_military_pact(n)), icon="army")
+            self._add_button(pygame.Rect(panel.x + 684, panel.y + 126, 92, 30), tr("action.guarantee"), lambda s, n=target.name: action_none(s.player_guarantee_independence(n)), icon="stability")
+            self._add_button(pygame.Rect(panel.x + 782, panel.y + 126, 92, 30), tr("action.ultimatum"), lambda s, n=target.name: action_none(s.player_send_ultimatum(n)), icon="war")
 
     def _draw_politics_tab(self, screen: pygame.Surface, state: GameState, panel: pygame.Rect) -> None:
         player = state.player_country
@@ -281,10 +290,14 @@ class UITabsMixin:
             return
         supply = player.supply_need()
         lines = [
+            f"GDP: {player.gdp} | GDP per capita {player.gdp_per_capita()} | Tax income {player.tax_income} | Military spending {player.military_spending}",
+            f"Society: unemployment {player.unemployment:.1f}% | education {player.education} | healthcare {player.healthcare}",
             f"Economy: income {player.last_month_income}, expenses {player.last_month_expenses}, balance {player.last_month_balance}, debt {player.debt}, inflation {player.inflation:.1f}%",
-            f"Military: strength {player.army}, infantry {player.units['infantry']}, tanks {player.units['tanks']}, artillery {player.units['artillery']}, aircraft {player.units['aircraft']}",
+            f"Military: strength {player.army}, morale {player.army_morale}, experience {player.army_experience}, wear {player.equipment_wear}",
+            f"Units: infantry {player.units['infantry']}, tanks {player.units['tanks']}, artillery {player.units['artillery']}, aircraft {player.units['aircraft']}",
             f"Supply need: oil {supply['oil']}, food {supply['food']}, metal {supply['metal']} | readiness {int(player.supply_ratio()*100)}%",
             f"Industry: factories {player.buildings['factory']}, farms {player.buildings['farm']}, oil fields {player.buildings['oil_field']}, mines {player.buildings['mine']}",
+            f"Treaties: trade {len(player.trade_agreements)}, military {len(player.military_agreements)}, guarantees {len(player.guarantees)}, sanctioned by {len(player.sanctioned_by)}",
             f"Regions: {len(player.provinces)} | Regional economy {player.regional_economy()} | Active wars {len([w for w in state.active_wars.values() if player.name in [w.get('attacker'), w.get('defender')]])}",
         ]
         y = panel.y + 50

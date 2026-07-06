@@ -1,1 +1,3 @@
-﻿from map.render import *
+"""Deprecated compatibility wrapper. Use map.render directly."""
+
+from map.render import *

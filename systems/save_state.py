@@ -10,11 +10,11 @@ from map.camera import MapCamera
 from systems.settings import DEFAULT_SETTINGS
 
 
-SUPPORTED_LEGACY_SAVE_VERSIONS = {"0.4", "0.5", "0.6", "0.7", "0.8", SAVE_SCHEMA_VERSION}
+SUPPORTED_LEGACY_SAVE_VERSIONS = {"0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0-alpha", SAVE_SCHEMA_VERSION}
 
 
 def migrate_save_data(data: Dict[str, object]) -> Dict[str, object]:
-    """Normalize old save dictionaries to the current v0.9 schema."""
+    """Normalize old save dictionaries to the current v1.0.1 schema."""
     migrated = dict(data)
     old_version = str(migrated.get("version", "0.4"))
     migrated["_loaded_from_version"] = old_version

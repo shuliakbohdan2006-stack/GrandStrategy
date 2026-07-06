@@ -37,6 +37,15 @@ def country_to_dict(self) -> Dict[str, object]:
         "equipment": self.equipment,
         "debt": self.debt,
         "inflation": self.inflation,
+        "gdp": self.gdp,
+        "unemployment": self.unemployment,
+        "education": self.education,
+        "healthcare": self.healthcare,
+        "military_spending": self.military_spending,
+        "tax_income": self.tax_income,
+        "army_experience": self.army_experience,
+        "army_morale": self.army_morale,
+        "equipment_wear": self.equipment_wear,
         "last_month_income": self.last_month_income,
         "last_month_expenses": self.last_month_expenses,
         "last_month_balance": self.last_month_balance,
@@ -44,8 +53,28 @@ def country_to_dict(self) -> Dict[str, object]:
         "vassal_of": self.vassal_of,
         "vassals": sorted(self.vassals),
         "allies": sorted(self.allies),
+        "sanctions_against": sorted(self.sanctions_against),
+        "sanctioned_by": sorted(self.sanctioned_by),
+        "trade_agreements": sorted(self.trade_agreements),
+        "military_agreements": sorted(self.military_agreements),
+        "guarantees": sorted(self.guarantees),
+        "guaranteed_by": sorted(self.guaranteed_by),
+        "ultimatums_sent": sorted(self.ultimatums_sent),
+        "ultimatum_outcomes": self.ultimatum_outcomes,
         "wars": sorted(self.wars),
-        "relations": self.relations,
+        "relations": {
+            name: value
+            for name, value in self.relations.items()
+            if abs(int(value)) >= 15
+            or name in self.allies
+            or name in self.wars
+            or name in self.trade_agreements
+            or name in self.military_agreements
+            or name in self.sanctions_against
+            or name in self.sanctioned_by
+            or name in self.guarantees
+            or name in self.guaranteed_by
+        },
         "spouse": self.spouse,
         "lover": self.lover,
         "children": self.children,
@@ -94,6 +123,15 @@ def country_from_dict(cls, data: Dict[str, object]):
         equipment=dict(data.get("equipment", default_equipment())),  # type: ignore[arg-type]
         debt=int(data.get("debt", 0)),
         inflation=float(data.get("inflation", 2.0)),
+        gdp=int(data.get("gdp", 0)),
+        unemployment=float(data.get("unemployment", 7.0)),
+        education=int(data.get("education", 55)),
+        healthcare=int(data.get("healthcare", 55)),
+        military_spending=int(data.get("military_spending", 0)),
+        tax_income=int(data.get("tax_income", 0)),
+        army_experience=int(data.get("army_experience", 18)),
+        army_morale=int(data.get("army_morale", 70)),
+        equipment_wear=int(data.get("equipment_wear", 8)),
         last_month_income=int(data.get("last_month_income", 0)),
         last_month_expenses=int(data.get("last_month_expenses", 0)),
         last_month_balance=int(data.get("last_month_balance", 0)),
@@ -102,6 +140,14 @@ def country_from_dict(cls, data: Dict[str, object]):
     )
     country.vassals = set(data.get("vassals", []))  # type: ignore[arg-type]
     country.allies = set(data.get("allies", []))  # type: ignore[arg-type]
+    country.sanctions_against = set(data.get("sanctions_against", []))  # type: ignore[arg-type]
+    country.sanctioned_by = set(data.get("sanctioned_by", []))  # type: ignore[arg-type]
+    country.trade_agreements = set(data.get("trade_agreements", []))  # type: ignore[arg-type]
+    country.military_agreements = set(data.get("military_agreements", []))  # type: ignore[arg-type]
+    country.guarantees = set(data.get("guarantees", []))  # type: ignore[arg-type]
+    country.guaranteed_by = set(data.get("guaranteed_by", []))  # type: ignore[arg-type]
+    country.ultimatums_sent = set(data.get("ultimatums_sent", []))  # type: ignore[arg-type]
+    country.ultimatum_outcomes = dict(data.get("ultimatum_outcomes", {}))  # type: ignore[arg-type]
     country.wars = set(data.get("wars", []))  # type: ignore[arg-type]
     country.relations = dict(data.get("relations", {}))  # type: ignore[arg-type]
     country.spouse = data.get("spouse")  # type: ignore[assignment]
@@ -113,6 +159,7 @@ def country_from_dict(cls, data: Dict[str, object]):
     country._ensure_buildings()
     country._ensure_equipment()
     country._ensure_internal_problems()
+    country._ensure_alpha_indicators()
     if not country.provinces:
         country.provinces = [province(f"{country.name} Core", country.population, country.economy, 4, 8, 5)]
     country.sync_army_from_units()
